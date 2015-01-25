@@ -5,6 +5,9 @@ from parse_rest.datatypes import Object
 import sched, time
 from calendar import timegm
 
+import threading
+from threading import Thread
+
 from apns import APNs, Payload
 
 from twilio.rest import TwilioRestClient
@@ -43,10 +46,10 @@ def check_db(sc):
                 user.lastPing = timestamp()
             else:
                 responseMinutes = ((timestamp() / 60.0) - (user.lastPing / 60.0))
-                if responseMinutes >= 15:
+                if responseMinutes >= 0.5:
                     contacts = user.contacts.split(",")
                     for contact in contacts:
-                        message = client.messages.create(body="Danger!", to="+%s" % (contact), from_="+19177461129")
+                        message = client.messages.create(body="%s has not replied to their most recent Transponder notification. Make sure they're safe by checking their location at http://104.236.122.251/map?uid=%s" % (user.name, user.objectId), to="+%s" % (contact), from_="+19177461129")
         else:
             user.confirmationSent = False
 
@@ -54,12 +57,9 @@ def check_db(sc):
 
     sc.enter(5, 1, check_db, (sc,))
 
-s.enter(5, 1, check_db, (s,))
-s.run()
-
 @route('/map')
 def map():
-    objectId = request.query['rid']
+    objectId = request.query['uid']
     user = Users.Query.get(objectId=objectId)
     lat = user.latitude
     lon = user.longitude
@@ -86,7 +86,7 @@ def map():
                 var marker = new google.maps.Marker({
                         position: coords,
                         map: map,
-                        title: \"""" + str(user.lastPing) + """'s Location'\"
+                        title: \"""" + str(user.name) + """'s Location'\"
                 });
             }
             google.maps.event.addDomListener(window, 'load', initialize);
@@ -97,4 +97,21 @@ def map():
     </body>
 </html>"""
 
-run(host='104.236.122.251', port=80, debug=True)
+def start_backend():
+    s.enter(5, 1, check_db, (s,))
+    s.run()
+
+def start_site():
+    run(host='104.236.122.251', port=80, debug=True)
+
+if __name__ == '__main__':
+    backend = Thread(target=start_backend)
+    backend.daemon = True
+    backend.start()
+
+    site = Thread(target=start_site)
+    site.daemon = True
+    site.start()
+
+    while True:
+        time.sleep(1)
