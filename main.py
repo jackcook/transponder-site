@@ -28,6 +28,9 @@ class Users(Object):
 
 s = sched.scheduler(time.time, time.sleep)
 
+def text_message_2():
+    client.messages.create(body="If it helps, %s told us they were going to be at %s. http://104.236.122.251/map?lat=%f&lon=%f" % (user.name, user.expectedName, user.expectedLatitude, user.expectedLongitude), to="+%s" % (contact), from_="+19177461129")
+
 def check_db(sc):
     print("Checking database...")
 
@@ -35,7 +38,7 @@ def check_db(sc):
 
     for user in users:
         minutes = ((timestamp() / 60.0) - (user.lastResponse / 60.0))
-        if minutes >= user.pingInterval:
+        if minutes >= 0.1:#user.pingInterval:
             if not user.confirmationSent:
                 print "Confirmation sending..."
                 token_hex = user.deviceToken
@@ -47,7 +50,8 @@ def check_db(sc):
             else:
                 if not user.emergencySent:
                     responseMinutes = ((timestamp() / 60.0) - (user.lastPing / 60.0))
-                    if responseMinutes >= 0.5:
+                    if responseMinutes >= 0.1:#15:
+                        print "Emergency sending..."
                         contacts = user.contacts.split(",")
                         for contact in contacts:
                             client.messages.create(body="%s has not replied to their most recent Transponder notification. Make sure they're safe by checking their location at http://104.236.122.251/map?uid=%s" % (user.name, user.objectId), to="+%s" % (contact), from_="+19177461129")
@@ -75,7 +79,7 @@ def map():
     else:
         lat = request.query['lat']
         lon = request.query['lon']
-    
+
     return """<!DOCTYPE html>
 <html>
     <head>
