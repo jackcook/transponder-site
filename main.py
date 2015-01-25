@@ -35,9 +35,9 @@ def check_db(sc):
 
     for user in users:
         minutes = ((timestamp() / 60.0) - (user.lastResponse / 60.0))
-        #print(str(minutes))
         if minutes >= user.pingInterval:
             if not user.confirmationSent:
+                print "Confirmation sending..."
                 token_hex = user.deviceToken
                 payload = Payload(alert="Are you OK?", sound="default", badge=1)
                 apns.gateway_server.send_notification(token_hex, payload)
@@ -45,13 +45,18 @@ def check_db(sc):
                 user.confirmationSent = True
                 user.lastPing = timestamp()
             else:
-                responseMinutes = ((timestamp() / 60.0) - (user.lastPing / 60.0))
-                if responseMinutes >= 0.5:
-                    contacts = user.contacts.split(",")
-                    for contact in contacts:
-                        message = client.messages.create(body="%s has not replied to their most recent Transponder notification. Make sure they're safe by checking their location at http://104.236.122.251/map?uid=%s" % (user.name, user.objectId), to="+%s" % (contact), from_="+19177461129")
+                if not user.emergencySent:
+                    responseMinutes = ((timestamp() / 60.0) - (user.lastPing / 60.0))
+                    if responseMinutes >= 0.5:
+                        contacts = user.contacts.split(",")
+                        for contact in contacts:
+                            client.messages.create(body="%s has not replied to their most recent Transponder notification. Make sure they're safe by checking their location at http://104.236.122.251/map?uid=%s" % (user.name, user.objectId), to="+%s" % (contact), from_="+19177461129")
+                            client.messages.create(body="If it helps, %s told us they were going to be at %s. http://104.236.122.251/map?lat=%f&lon=%f" % (user.name, user.expectedName, user.expectedLatitude, user.expectedLongitude), to="+%s" % (contact), from_="+19177461129")
+
+                        user.emergencySent = True
         else:
             user.confirmationSent = False
+            user.emergencySent = False
 
         user.save()
 
@@ -59,10 +64,18 @@ def check_db(sc):
 
 @route('/map')
 def map():
-    objectId = request.query['uid']
-    user = Users.Query.get(objectId=objectId)
-    lat = user.latitude
-    lon = user.longitude
+    lat = 0.0
+    lon = 0.0
+
+    if "uid" in request.query_string:
+        objectId = request.query['uid']
+        user = Users.Query.get(objectId=objectId)
+        lat = user.latitude
+        lon = user.longitude
+    else:
+        lat = request.query['lat']
+        lon = request.query['lon']
+    
     return """<!DOCTYPE html>
 <html>
     <head>
@@ -86,7 +99,7 @@ def map():
                 var marker = new google.maps.Marker({
                         position: coords,
                         map: map,
-                        title: \"""" + str(user.name) + """'s Location'\"
+                        title: "Location"
                 });
             }
             google.maps.event.addDomListener(window, 'load', initialize);
