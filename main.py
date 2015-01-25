@@ -7,12 +7,18 @@ from calendar import timegm
 
 from apns import APNs, Payload
 
+from twilio.rest import TwilioRestClient
+
+register("lkHCX43bL8tqi0kpiICrOdXLlcx6yxDs3k9rUE5A", "uIE9zOF0dsbr5N9uPrtF2eBDiuGiIhuffvFsdaaA")
+
 apns = APNs(use_sandbox=True, cert_file='TransponderCert.pem', key_file='TransponderKey_unencrypted.pem')
+
+account_sid = "AC2d73e6a6e37a5b3bd8809db9eafb2a60"
+auth_token = "b4e9be2219ad2cc986e8ab77b9874c84"
+client = TwilioRestClient(account_sid, auth_token)
 
 def timestamp():
     return timegm(time.gmtime())
-
-register("lkHCX43bL8tqi0kpiICrOdXLlcx6yxDs3k9rUE5A", "uIE9zOF0dsbr5N9uPrtF2eBDiuGiIhuffvFsdaaA")
 
 class Users(Object):
     pass
@@ -26,7 +32,7 @@ def check_db(sc):
 
     for user in users:
         minutes = ((timestamp() / 60.0) - (user.lastResponse / 60.0))
-        print(str(minutes))
+        #print(str(minutes))
         if minutes >= user.pingInterval:
             if not user.confirmationSent:
                 token_hex = user.deviceToken
@@ -34,14 +40,21 @@ def check_db(sc):
                 apns.gateway_server.send_notification(token_hex, payload)
 
                 user.confirmationSent = True
+                user.lastPing = timestamp()
+            else:
+                responseMinutes = ((timestamp() / 60.0) - (user.lastPing / 60.0))
+                if responseMinutes >= 15:
+                    contacts = user.contacts.split(",")
+                    for contact in contacts:
+                        message = client.messages.create(body="Danger!", to="+%s" % (contact), from_="+19177461129")
         else:
             user.confirmationSent = False
 
         user.save()
 
-    sc.enter(30, 1, check_db, (sc,))
+    sc.enter(5, 1, check_db, (sc,))
 
-s.enter(30, 1, check_db, (s,))
+s.enter(5, 1, check_db, (s,))
 s.run()
 
 @route('/map')
