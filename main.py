@@ -5,6 +5,10 @@ from parse_rest.datatypes import Object
 import sched, time
 from calendar import timegm
 
+from apns import APNs, Payload
+
+apns = APNs(use_sandbox=True, cert_file='TransponderCert.pem', key_file='TransponderKey_unencrypted.pem')
+
 def timestamp():
     return timegm(time.gmtime())
 
@@ -21,17 +25,23 @@ def check_db(sc):
     users = Users.Query.filter(onTrip=True)
 
     for user in users:
-        minutes = ((timestamp() / 60) - (user.lastResponse / 60))
+        minutes = ((timestamp() / 60.0) - (user.lastResponse / 60.0))
         print(str(minutes))
         if minutes >= user.pingInterval:
             if not user.confirmationSent:
-                print("Confirmation sent")
+                token_hex = user.deviceToken
+                payload = Payload(alert="Are you OK?", sound="default", badge=1)
+                apns.gateway_server.send_notification(token_hex, payload)
+
                 user.confirmationSent = True
-                user.save()
+        else:
+            user.confirmationSent = False
 
-    sc.enter(1, 1, check_db, (sc,))
+        user.save()
 
-s.enter(1, 1, check_db, (s,))
+    sc.enter(30, 1, check_db, (sc,))
+
+s.enter(30, 1, check_db, (s,))
 s.run()
 
 @route('/map')
